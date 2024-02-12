@@ -1,0 +1,52 @@
+#!/bin/bash
+
+###### The code provided in this repository is offered "as is" without any warranty, express or implied.
+###### The developer shall not be held liable for any damages, direct or indirect, arising from the use of this code.
+###### Users are advised to review and test the code thoroughly before deploying it in any production environment. 
+###### By using this code, you agree to hold the developer harmless from any liability.
+###### 02-11-2024 PGGHUB
+
+# Log file path
+log_file="/home/dagger/config_dagger_monitor.log"
+
+# Function to monitor the file for specified strings
+monitor_file() {
+    tail -f /home/dagger/config.log | while read line; do
+        timestamp=$(date +"%Y-%m-%d %H:%M:%S") # Get current timestamp
+        if echo "$line" | grep -q "is_up=true"; then
+            output="$timestamp: is_up=true"
+            echo "$output"
+            echo "$output" >> "$log_file"
+            # Reset the flag when is_up=true is detected
+            service_restarted=false
+        elif echo "$line" | grep -q "is_up=false"; then
+            output="$timestamp: is_up=false"
+            echo "$output"
+            echo "$output" >> "$log_file"
+            if ! $service_restarted; then
+                # Stop the service and wait for 30 seconds
+                sudo systemctl stop wield
+                sleep 30
+                # Start the service
+                sudo systemctl start wield
+                echo "$timestamp: Service 'wield' restarted. Waiting for is_up=true..."
+                echo "$timestamp: Service 'wield' restarted. Waiting for is_up=true..." >> "$log_file"
+                # Set a flag to indicate service has been restarted
+                service_restarted=true
+                # Set a timeout of 3 minutes
+                timeout=$((SECONDS+180))
+            else
+                # Check if timeout has been reached
+                if [ $SECONDS -ge $timeout ]; then
+                    echo "$timestamp: Timeout reached. Retrying..."
+                    echo "$timestamp: Timeout reached. Retrying..." >> "$log_file"
+                    # Reset the flag
+                    service_restarted=false
+                fi
+            fi
+        fi
+    done
+}
+
+# Call the monitoring function
+monitor_file
